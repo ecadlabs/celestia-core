@@ -1813,7 +1813,8 @@ func (cs *State) recordMetrics(height int64, block *types.Block) {
 				if commitSig.ForBlock() {
 					cs.metrics.ValidatorLastSignedHeight.With(label...).Set(float64(height))
 				} else {
-					cs.metrics.ValidatorMissedBlocks.With(label...).Add(float64(1))
+					cs.metrics.ValidatorMissedBlocks.With(label...).Add(1)
+					cs.metrics.ValidatorMissedBlocksTotal.With(label...).Add(1)
 				}
 			}
 
