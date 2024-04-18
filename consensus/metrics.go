@@ -39,6 +39,8 @@ type Metrics struct {
 	ValidatorPower metrics.Gauge
 	// Amount of blocks missed by a validator.
 	ValidatorMissedBlocks metrics.Gauge
+	// Amount of blocks missed by a validator.
+	ValidatorMissedBlocksTotal metrics.Counter
 	// Number of validators who did not sign.
 	MissingValidators metrics.Gauge
 	// Total power of the missing validators.
@@ -143,6 +145,12 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
 			Name:      "validator_missed_blocks",
+			Help:      "Total missed blocks for a validator (deprecated)",
+		}, append(labels, "validator_address")).With(labelsAndValues...),
+		ValidatorMissedBlocksTotal: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "validator_missed_blocks_total",
 			Help:      "Total missed blocks for a validator",
 		}, append(labels, "validator_address")).With(labelsAndValues...),
 		ValidatorsPower: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
@@ -289,14 +297,15 @@ func NopMetrics() *Metrics {
 		Rounds:       discard.NewGauge(),
 		StepDuration: discard.NewHistogram(),
 
-		Validators:               discard.NewGauge(),
-		ValidatorsPower:          discard.NewGauge(),
-		ValidatorPower:           discard.NewGauge(),
-		ValidatorMissedBlocks:    discard.NewGauge(),
-		MissingValidators:        discard.NewGauge(),
-		MissingValidatorsPower:   discard.NewGauge(),
-		ByzantineValidators:      discard.NewGauge(),
-		ByzantineValidatorsPower: discard.NewGauge(),
+		Validators:                 discard.NewGauge(),
+		ValidatorsPower:            discard.NewGauge(),
+		ValidatorPower:             discard.NewGauge(),
+		ValidatorMissedBlocks:      discard.NewGauge(),
+		ValidatorMissedBlocksTotal: discard.NewCounter(),
+		MissingValidators:          discard.NewGauge(),
+		MissingValidatorsPower:     discard.NewGauge(),
+		ByzantineValidators:        discard.NewGauge(),
+		ByzantineValidatorsPower:   discard.NewGauge(),
 
 		BlockIntervalSeconds: discard.NewHistogram(),
 		BlockTimeSeconds:     discard.NewGauge(),
