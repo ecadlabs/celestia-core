@@ -27,25 +27,37 @@ type Subscription interface {
 	Err() error
 }
 
+// EventBusOption sets an optional parameter on the EventBus.
+type EventBusOption func(*EventBus)
+
+// EvBusMetrics sets the metrics.
+func EvBusMetrics(metrics *EventBusMetrics) EventBusOption {
+	return func(e *EventBus) { e.metrics = metrics }
+}
+
 // EventBus is a common bus for all events going through the system. All calls
 // are proxied to underlying pubsub server. All events must be published using
 // EventBus to ensure correct data types.
 type EventBus struct {
 	service.BaseService
-	pubsub *cmtpubsub.Server
+	pubsub  *cmtpubsub.Server
+	metrics *EventBusMetrics
 }
 
 // NewEventBus returns a new event bus.
-func NewEventBus() *EventBus {
-	return NewEventBusWithBufferCapacity(defaultCapacity)
+func NewEventBus(options ...EventBusOption) *EventBus {
+	return NewEventBusWithBufferCapacity(defaultCapacity, options...)
 }
 
 // NewEventBusWithBufferCapacity returns a new event bus with the given buffer capacity.
-func NewEventBusWithBufferCapacity(cap int) *EventBus {
+func NewEventBusWithBufferCapacity(cap int, options ...EventBusOption) *EventBus {
 	// capacity could be exposed later if needed
 	pubsub := cmtpubsub.NewServer(cmtpubsub.BufferCapacity(cap))
-	b := &EventBus{pubsub: pubsub}
+	b := &EventBus{pubsub: pubsub, metrics: NopEventBusMetrics()}
 	b.BaseService = *service.NewBaseService(nil, "EventBus", b)
+	for _, option := range options {
+		option(b)
+	}
 	return b
 }
 
@@ -102,6 +114,7 @@ func (b *EventBus) UnsubscribeAll(ctx context.Context, subscriber string) error 
 func (b *EventBus) Publish(eventType string, eventData TMEventData) error {
 	// no explicit deadline for publishing events
 	ctx := context.Background()
+	b.metrics.EventsTotal.With("event_type", eventType).Add(1)
 	return b.pubsub.PublishWithEvents(ctx, eventData, map[string][]string{EventTypeKey: {eventType}})
 }
 
@@ -141,6 +154,7 @@ func (b *EventBus) PublishEventNewBlock(data EventDataNewBlock) error {
 	// add predefined new block event
 	events[EventTypeKey] = append(events[EventTypeKey], EventNewBlock)
 
+	b.metrics.EventsTotal.With("event_type", EventNewBlock).Add(1)
 	return b.pubsub.PublishWithEvents(ctx, data, events)
 }
 
@@ -159,6 +173,7 @@ func (b *EventBus) PublishEventNewBlockHeader(data EventDataNewBlockHeader) erro
 	// add predefined new block header event
 	events[EventTypeKey] = append(events[EventTypeKey], EventNewBlockHeader)
 
+	b.metrics.EventsTotal.With("event_type", EventNewBlockHeader).Add(1)
 	return b.pubsub.PublishWithEvents(ctx, data, events)
 }
 
@@ -188,6 +203,7 @@ func (b *EventBus) PublishEventTx(data EventDataTx) error {
 	events[TxHashKey] = append(events[TxHashKey], fmt.Sprintf("%X", Tx(data.Tx).Hash()))
 	events[TxHeightKey] = append(events[TxHeightKey], fmt.Sprintf("%d", data.Height))
 
+	b.metrics.EventsTotal.With("event_type", EventTx).Add(1)
 	return b.pubsub.PublishWithEvents(ctx, data, events)
 }
 

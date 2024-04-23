@@ -113,26 +113,57 @@ func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		DefaultGenesisDocProviderFunc(config),
 		DefaultDBProvider,
-		DefaultMetricsProvider(config.Instrumentation),
+		(*DefaultMetricsProvider)(config.Instrumentation),
 		logger,
 	)
 }
 
 // MetricsProvider returns a consensus, p2p and mempool Metrics.
-type MetricsProvider func(chainID, softwareVersion string) (*cs.Metrics, *p2p.Metrics, *mempl.Metrics, *sm.Metrics)
+type MetricsProvider interface {
+	NewConsensusMetrics(chainID, softwareVersion string) *cs.Metrics
+	NewP2PMetrics(chainID, softwareVersion string) *p2p.Metrics
+	NewMempoolMetrics(chainID, softwareVersion string) *mempl.Metrics
+	NewStateMetrics(chainID, softwareVersion string) *sm.Metrics
+	NewEventBusMetrics(chainID string) *types.EventBusMetrics
+}
 
 // DefaultMetricsProvider returns Metrics build using Prometheus client library
 // if Prometheus is enabled. Otherwise, it returns no-op Metrics.
-func DefaultMetricsProvider(config *cfg.InstrumentationConfig) MetricsProvider {
-	return func(chainID, softwareVersion string) (*cs.Metrics, *p2p.Metrics, *mempl.Metrics, *sm.Metrics) {
-		if config.Prometheus {
-			return cs.PrometheusMetrics(config.Namespace, "chain_id", chainID, "version", softwareVersion),
-				p2p.PrometheusMetrics(config.Namespace, "chain_id", chainID, "version", softwareVersion),
-				mempl.PrometheusMetrics(config.Namespace, "chain_id", chainID, "version", softwareVersion),
-				sm.PrometheusMetrics(config.Namespace, "chain_id", chainID, "version", softwareVersion)
-		}
-		return cs.NopMetrics(), p2p.NopMetrics(), mempl.NopMetrics(), sm.NopMetrics()
+type DefaultMetricsProvider cfg.InstrumentationConfig
+
+func (p *DefaultMetricsProvider) NewConsensusMetrics(chainID, softwareVersion string) *cs.Metrics {
+	if p != nil {
+		return cs.PrometheusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID, "version", softwareVersion)
 	}
+	return cs.NopMetrics()
+}
+
+func (p *DefaultMetricsProvider) NewP2PMetrics(chainID, softwareVersion string) *p2p.Metrics {
+	if p != nil {
+		return p2p.PrometheusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID, "version", softwareVersion)
+	}
+	return p2p.NopMetrics()
+}
+
+func (p *DefaultMetricsProvider) NewMempoolMetrics(chainID, softwareVersion string) *mempl.Metrics {
+	if p != nil {
+		return mempl.PrometheusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID, "version", softwareVersion)
+	}
+	return mempl.NopMetrics()
+}
+
+func (p *DefaultMetricsProvider) NewStateMetrics(chainID, softwareVersion string) *sm.Metrics {
+	if p != nil {
+		return sm.PrometheusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID, "version", softwareVersion)
+	}
+	return sm.NopMetrics()
+}
+
+func (p *DefaultMetricsProvider) NewEventBusMetrics(chainID string) *types.EventBusMetrics {
+	if p != nil {
+		return types.PrometheusEventBusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID)
+	}
+	return types.NopEventBusMetrics()
 }
 
 // Option sets a parameter for the node.
@@ -264,8 +295,8 @@ func createAndStartProxyAppConns(clientCreator proxy.ClientCreator, logger log.L
 	return proxyApp, nil
 }
 
-func createAndStartEventBus(logger log.Logger) (*types.EventBus, error) {
-	eventBus := types.NewEventBus()
+func createAndStartEventBus(logger log.Logger, metrics *types.EventBusMetrics) (*types.EventBus, error) {
+	eventBus := types.NewEventBus(types.EvBusMetrics(metrics))
 	eventBus.SetLogger(logger.With("module", "events"))
 	if err := eventBus.Start(); err != nil {
 		return nil, err
@@ -792,7 +823,7 @@ func NewNode(config *cfg.Config,
 	// we might need to index the txs of the replayed block as this might not have happened
 	// when the node stopped last time (i.e. the node stopped after it saved the block
 	// but before it indexed the txs, or, endblocker panicked)
-	eventBus, err := createAndStartEventBus(logger)
+	eventBus, err := createAndStartEventBus(logger, metricsProvider.NewEventBusMetrics(genDoc.ChainID))
 	if err != nil {
 		return nil, err
 	}
@@ -856,7 +887,10 @@ func NewNode(config *cfg.Config,
 
 	logNodeStartupInfo(state, pubKey, logger, consensusLogger)
 
-	csMetrics, p2pMetrics, memplMetrics, smMetrics := metricsProvider(genDoc.ChainID, softwareVersion)
+	csMetrics := metricsProvider.NewConsensusMetrics(genDoc.ChainID, softwareVersion)
+	p2pMetrics := metricsProvider.NewP2PMetrics(genDoc.ChainID, softwareVersion)
+	memplMetrics := metricsProvider.NewMempoolMetrics(genDoc.ChainID, softwareVersion)
+	smMetrics := metricsProvider.NewStateMetrics(genDoc.ChainID, softwareVersion)
 
 	// create an optional tracer client to collect trace data.
 	tracer, err := trace.NewTracer(

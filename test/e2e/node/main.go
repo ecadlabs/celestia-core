@@ -138,7 +138,7 @@ func startNode(cfg *Config) error {
 		proxy.NewLocalClientCreator(app),
 		node.DefaultGenesisDocProviderFunc(cmtcfg),
 		node.DefaultDBProvider,
-		node.DefaultMetricsProvider(cmtcfg.Instrumentation),
+		(*node.DefaultMetricsProvider)(cmtcfg.Instrumentation),
 		nodeLogger,
 	)
 	if err != nil {
