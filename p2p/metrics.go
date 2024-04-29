@@ -35,6 +35,8 @@ type Metrics struct {
 	PeerSendBytesTotal metrics.Counter
 	// Pending bytes to be sent to a given peer.
 	PeerPendingSendBytes metrics.Gauge
+	// Peer's ping latency in milliseconds
+	PeerPingLatency metrics.Gauge
 	// Number of transactions submitted by each peer.
 	NumTxs metrics.Gauge
 	// Number of bytes of each message type received.
@@ -76,6 +78,12 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "peer_pending_send_bytes",
 			Help:      "Pending bytes to be sent to a given peer.",
 		}, append(labels, "peer_id")).With(labelsAndValues...),
+		PeerPingLatency: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "peer_ping_latency",
+			Help:      "Ping latency in milliseconds.",
+		}, append(labels, "peer_id")).With(labelsAndValues...),
 		NumTxs: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
@@ -103,6 +111,7 @@ func NopMetrics() *Metrics {
 		PeerReceiveBytesTotal:    discard.NewCounter(),
 		PeerSendBytesTotal:       discard.NewCounter(),
 		PeerPendingSendBytes:     discard.NewGauge(),
+		PeerPingLatency:          discard.NewGauge(),
 		NumTxs:                   discard.NewGauge(),
 		MessageReceiveBytesTotal: discard.NewCounter(),
 		MessageSendBytesTotal:    discard.NewCounter(),

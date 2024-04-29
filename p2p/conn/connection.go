@@ -104,8 +104,10 @@ type MConnection struct {
 	// are safe to call concurrently.
 	stopMtx cmtsync.Mutex
 
-	flushTimer *timer.ThrottleTimer // flush writes as necessary but throttled.
-	pingTimer  *time.Ticker         // send pings periodically
+	flushTimer  *timer.ThrottleTimer // flush writes as necessary but throttled.
+	pingTimer   *time.Ticker         // send pings periodically
+	lastPing    time.Time
+	pingLatency atomic.Int64
 
 	// close conn if pong is not received in pongTimeout
 	pongTimer     *time.Timer
@@ -445,6 +447,7 @@ FOR_LOOP:
 				c.Logger.Error("Failed to send PacketPing", "err", err)
 				break SELECTION
 			}
+			c.lastPing = time.Now()
 			c.sendMonitor.Update(_n)
 			c.Logger.Debug("Starting pong timer", "dur", c.config.PongTimeout)
 			c.pongTimer = time.AfterFunc(c.config.PongTimeout, func() {
@@ -459,6 +462,8 @@ FOR_LOOP:
 				c.Logger.Debug("Pong timeout")
 				err = errors.New("pong timeout")
 			} else {
+				elapsed := time.Since(c.lastPing)
+				c.pingLatency.Store(int64(elapsed))
 				c.stopPongTimer()
 			}
 		case <-c.pong:
@@ -688,6 +693,7 @@ type ConnectionStatus struct {
 	SendMonitor flow.Status
 	RecvMonitor flow.Status
 	Channels    []ChannelStatus
+	PingLatency time.Duration
 }
 
 type ChannelStatus struct {
@@ -704,6 +710,7 @@ func (c *MConnection) Status() ConnectionStatus {
 	status.SendMonitor = c.sendMonitor.Status()
 	status.RecvMonitor = c.recvMonitor.Status()
 	status.Channels = make([]ChannelStatus, len(c.channels))
+	status.PingLatency = time.Duration(c.pingLatency.Load())
 	for i, channel := range c.channels {
 		status.Channels[i] = ChannelStatus{
 			ID:                channel.desc.ID,
