@@ -499,6 +499,7 @@ func (p *peer) metricsReporter() {
 			}
 
 			p.metrics.PeerPendingSendBytes.With("peer_id", string(p.ID())).Set(sendQueueSize)
+			p.metrics.PeerPingLatency.With("peer_id", string(p.ID())).Set(float64(status.PingLatency / time.Millisecond))
 		case <-p.Quit():
 			return
 		}
