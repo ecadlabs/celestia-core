@@ -113,7 +113,7 @@ func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
 		proxy.DefaultClientCreator(config.ProxyApp, config.ABCI, config.DBDir()),
 		DefaultGenesisDocProviderFunc(config),
 		DefaultDBProvider,
-		(*DefaultMetricsProvider)(config.Instrumentation),
+		DefaultMetricsProvider(config.Instrumentation),
 		logger,
 	)
 }
@@ -129,37 +129,41 @@ type MetricsProvider interface {
 
 // DefaultMetricsProvider returns Metrics build using Prometheus client library
 // if Prometheus is enabled. Otherwise, it returns no-op Metrics.
-type DefaultMetricsProvider cfg.InstrumentationConfig
+type defaultMetricsProvider cfg.InstrumentationConfig
 
-func (p *DefaultMetricsProvider) NewConsensusMetrics(chainID, softwareVersion string) *cs.Metrics {
+func DefaultMetricsProvider(config *cfg.InstrumentationConfig) MetricsProvider {
+	return (*defaultMetricsProvider)(config)
+}
+
+func (p *defaultMetricsProvider) NewConsensusMetrics(chainID, softwareVersion string) *cs.Metrics {
 	if p != nil {
 		return cs.PrometheusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID, "version", softwareVersion)
 	}
 	return cs.NopMetrics()
 }
 
-func (p *DefaultMetricsProvider) NewP2PMetrics(chainID, softwareVersion string) *p2p.Metrics {
+func (p *defaultMetricsProvider) NewP2PMetrics(chainID, softwareVersion string) *p2p.Metrics {
 	if p != nil {
 		return p2p.PrometheusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID, "version", softwareVersion)
 	}
 	return p2p.NopMetrics()
 }
 
-func (p *DefaultMetricsProvider) NewMempoolMetrics(chainID, softwareVersion string) *mempl.Metrics {
+func (p *defaultMetricsProvider) NewMempoolMetrics(chainID, softwareVersion string) *mempl.Metrics {
 	if p != nil {
 		return mempl.PrometheusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID, "version", softwareVersion)
 	}
 	return mempl.NopMetrics()
 }
 
-func (p *DefaultMetricsProvider) NewStateMetrics(chainID, softwareVersion string) *sm.Metrics {
+func (p *defaultMetricsProvider) NewStateMetrics(chainID, softwareVersion string) *sm.Metrics {
 	if p != nil {
 		return sm.PrometheusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID, "version", softwareVersion)
 	}
 	return sm.NopMetrics()
 }
 
-func (p *DefaultMetricsProvider) NewEventBusMetrics(chainID string) *types.EventBusMetrics {
+func (p *defaultMetricsProvider) NewEventBusMetrics(chainID string) *types.EventBusMetrics {
 	if p != nil {
 		return types.PrometheusEventBusMetrics((*cfg.InstrumentationConfig)(p).Namespace, "chain_id", chainID)
 	}
